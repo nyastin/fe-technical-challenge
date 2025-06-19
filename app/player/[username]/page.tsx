@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ErrorBoundary } from "@/components/error-boundary";
 import {
   ArrowLeftIcon,
   UserIcon,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 
-export default function PlayerProfilePage() {
+function PlayerProfilePageContent() {
   const params = useParams();
   const router = useRouter();
   const username = params.username as string;
@@ -79,29 +80,83 @@ export default function PlayerProfilePage() {
   }
 
   function formatDate(timestamp: number) {
-    return new Date(timestamp * 1000).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
+    try {
+      if (!timestamp || typeof timestamp !== 'number' || timestamp <= 0) {
+        return 'Unknown date';
+      }
+      return new Date(timestamp * 1000).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch {
+      return 'Invalid date';
+    }
   }
 
   function formatLastOnline(timestamp: number) {
-    const now = Date.now();
-    const lastOnline = timestamp * 1000;
-    const diffMs = now - lastOnline;
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-      if (diffHours === 0) {
-        const diffMinutes = Math.floor(diffMs / (1000 * 60));
-        return `${diffMinutes} minutes ago`;
+    try {
+      if (!timestamp || typeof timestamp !== 'number' || timestamp <= 0) {
+        return 'Unknown';
       }
-      return `${diffHours} hours ago`;
-    }
+      
+      const now = Date.now();
+      const lastOnline = timestamp * 1000;
+      const diffMs = now - lastOnline;
+      
+      if (diffMs < 0) {
+        return 'Recently';
+      }
+      
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    return `${diffDays} days ago`;
+      if (diffDays === 0) {
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        if (diffHours === 0) {
+          const diffMinutes = Math.floor(diffMs / (1000 * 60));
+          return `${Math.max(0, diffMinutes)} minutes ago`;
+        }
+        return `${diffHours} hours ago`;
+      }
+
+      return `${diffDays} days ago`;
+    } catch {
+      return 'Unknown';
+    }
+  }
+
+  // Helper function to safely get rating with fallback
+  function getSafeRating(
+    gameStats: PlayerStats['chess_blitz'] | PlayerStats['chess_rapid'] | PlayerStats['chess_bullet'], 
+    type: 'last' | 'best', 
+    fallback: string | number = 'N/A'
+  ) {
+    return gameStats?.[type]?.rating ?? fallback;
+  }
+
+  // Helper function to safely get game record with fallbacks
+  function getSafeRecord(
+    gameStats: PlayerStats['chess_blitz'] | PlayerStats['chess_rapid'] | PlayerStats['chess_bullet']
+  ) {
+    const record = gameStats?.record;
+    return {
+      win: record?.win ?? 0,
+      loss: record?.loss ?? 0,
+      draw: record?.draw ?? 0,
+    };
+  }
+
+  // Helper function to check if game stats are valid and complete
+  function isValidGameStats(
+    gameStats: PlayerStats['chess_blitz'] | PlayerStats['chess_rapid'] | PlayerStats['chess_bullet']
+  ): gameStats is NonNullable<PlayerStats['chess_blitz']> {
+    return gameStats !== undefined && 
+           gameStats.last !== undefined && 
+           typeof gameStats.last.rating === 'number' &&
+           gameStats.best !== undefined &&
+           typeof gameStats.best.rating === 'number' &&
+           gameStats.record !== undefined &&
+           typeof gameStats.record.win === 'number';
   }
 
   if (error) {
@@ -244,10 +299,12 @@ export default function PlayerProfilePage() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 text-sm">
-                    <CalendarIcon className="w-4 h-4 text-muted-foreground" />
-                    <span>Joined {formatDate(player.joined)}</span>
-                  </div>
+                  {player.joined && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <CalendarIcon className="w-4 h-4 text-muted-foreground" />
+                      <span>Joined {formatDate(player.joined)}</span>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-2 text-sm">
                     <div className="w-4 h-4 flex items-center justify-center">
@@ -262,7 +319,9 @@ export default function PlayerProfilePage() {
                     <span>
                       {player.status === "online"
                         ? "Online now"
-                        : `Last seen ${formatLastOnline(player.last_online)}`}
+                        : player.last_online 
+                          ? `Last seen ${formatLastOnline(player.last_online)}`
+                          : "Status unknown"}
                     </span>
                   </div>
                 </div>
@@ -282,7 +341,7 @@ export default function PlayerProfilePage() {
               <CardContent>
                 {stats ? (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {stats.chess_blitz && (
+                    {stats.chess_blitz && isValidGameStats(stats.chess_blitz) && (
                       <Card>
                         <CardContent className="p-4">
                           <h4 className="font-semibold text-sm text-muted-foreground mb-2">
@@ -290,22 +349,22 @@ export default function PlayerProfilePage() {
                           </h4>
                           <div className="space-y-1">
                             <p className="text-2xl font-bold">
-                              {stats.chess_blitz.last.rating}
+                              {getSafeRating(stats.chess_blitz, 'last')}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              Best: {stats.chess_blitz.best.rating}
+                              Best: {getSafeRating(stats.chess_blitz, 'best')}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              W: {stats.chess_blitz.record.win} | L:{" "}
-                              {stats.chess_blitz.record.loss} | D:{" "}
-                              {stats.chess_blitz.record.draw}
+                              W: {getSafeRecord(stats.chess_blitz).win} | L:{" "}
+                              {getSafeRecord(stats.chess_blitz).loss} | D:{" "}
+                              {getSafeRecord(stats.chess_blitz).draw}
                             </p>
                           </div>
                         </CardContent>
                       </Card>
                     )}
 
-                    {stats.chess_rapid && (
+                    {stats.chess_rapid && isValidGameStats(stats.chess_rapid) && (
                       <Card>
                         <CardContent className="p-4">
                           <h4 className="font-semibold text-sm text-muted-foreground mb-2">
@@ -313,22 +372,22 @@ export default function PlayerProfilePage() {
                           </h4>
                           <div className="space-y-1">
                             <p className="text-2xl font-bold">
-                              {stats.chess_rapid.last.rating}
+                              {getSafeRating(stats.chess_rapid, 'last')}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              Best: {stats.chess_rapid.best.rating}
+                              Best: {getSafeRating(stats.chess_rapid, 'best')}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              W: {stats.chess_rapid.record.win} | L:{" "}
-                              {stats.chess_rapid.record.loss} | D:{" "}
-                              {stats.chess_rapid.record.draw}
+                              W: {getSafeRecord(stats.chess_rapid).win} | L:{" "}
+                              {getSafeRecord(stats.chess_rapid).loss} | D:{" "}
+                              {getSafeRecord(stats.chess_rapid).draw}
                             </p>
                           </div>
                         </CardContent>
                       </Card>
                     )}
 
-                    {stats.chess_bullet && (
+                    {stats.chess_bullet && isValidGameStats(stats.chess_bullet) && (
                       <Card>
                         <CardContent className="p-4">
                           <h4 className="font-semibold text-sm text-muted-foreground mb-2">
@@ -336,19 +395,30 @@ export default function PlayerProfilePage() {
                           </h4>
                           <div className="space-y-1">
                             <p className="text-2xl font-bold">
-                              {stats.chess_bullet.last.rating}
+                              {getSafeRating(stats.chess_bullet, 'last')}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              Best: {stats.chess_bullet.best.rating}
+                              Best: {getSafeRating(stats.chess_bullet, 'best')}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              W: {stats.chess_bullet.record.win} | L:{" "}
-                              {stats.chess_bullet.record.loss} | D:{" "}
-                              {stats.chess_bullet.record.draw}
+                              W: {getSafeRecord(stats.chess_bullet).win} | L:{" "}
+                              {getSafeRecord(stats.chess_bullet).loss} | D:{" "}
+                              {getSafeRecord(stats.chess_bullet).draw}
                             </p>
                           </div>
                         </CardContent>
                       </Card>
+                    )}
+
+                    {/* Show message if no valid game stats are available */}
+                    {(!stats.chess_blitz || !isValidGameStats(stats.chess_blitz)) &&
+                     (!stats.chess_rapid || !isValidGameStats(stats.chess_rapid)) &&
+                     (!stats.chess_bullet || !isValidGameStats(stats.chess_bullet)) && (
+                      <div className="col-span-full text-center py-8">
+                        <p className="text-muted-foreground">
+                          Chess game statistics are incomplete or unavailable for this player.
+                        </p>
+                      </div>
                     )}
                   </div>
                 ) : (
@@ -364,5 +434,13 @@ export default function PlayerProfilePage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PlayerProfilePage() {
+  return (
+    <ErrorBoundary>
+      <PlayerProfilePageContent />
+    </ErrorBoundary>
   );
 }
