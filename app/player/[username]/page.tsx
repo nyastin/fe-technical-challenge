@@ -9,12 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { LastOnlineClock } from "@/components/last-online-clock";
+import { OfflineDurationCard } from "@/components/offline-duration-card";
 import {
   ArrowLeftIcon,
   UserIcon,
   TrophyIcon,
   CalendarIcon,
   GlobeIcon,
+  ClockIcon,
 } from "lucide-react";
 import Image from "next/image";
 
@@ -257,6 +260,16 @@ function PlayerProfilePageContent() {
           </div>
         </div>
 
+        {/* Prominent offline duration card */}
+        {player.status !== "online" && player.last_online && (
+          <div className="mb-6">
+            <OfflineDurationCard 
+              lastOnlineTimestamp={player.last_online}
+              playerName={player.name ?? player.username}
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Player Info Card */}
           <div className="lg:col-span-1">
@@ -324,6 +337,18 @@ function PlayerProfilePageContent() {
                           : "Status unknown"}
                     </span>
                   </div>
+
+                  {/* Real-time clock for offline players */}
+                  {player.status !== "online" && player.last_online && (
+                    <div className="flex items-center gap-2 text-sm pt-2 border-t border-border">
+                      <ClockIcon className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-muted-foreground">Time offline:</span>
+                      <LastOnlineClock 
+                        lastOnlineTimestamp={player.last_online}
+                        className="text-foreground font-semibold"
+                      />
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
