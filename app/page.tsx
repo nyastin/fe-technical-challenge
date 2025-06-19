@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { fetchGrandmasters, ChessApiError } from "@/lib/chess-api";
 import { GrandmasterCard } from "@/components/grandmaster-card";
 import { GrandmasterSkeleton } from "@/components/grandmaster-skeleton";
 import { Button } from "@/components/ui/button";
 
 export default function Home() {
+  const router = useRouter();
   const [grandmasters, setGrandmasters] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -34,11 +36,8 @@ export default function Home() {
   }, []);
 
   function handleGrandmasterClick(username: string) {
-    // TODO: Navigate to player profile page (Step 2)
-    console.log("Navigate to:", username);
-    alert(
-      `Navigation to ${username} profile page will be implemented in Step 2`,
-    );
+    // Navigate to player profile page
+    router.push(`/player/${username}`);
   }
 
   function handleLoadMore() {
